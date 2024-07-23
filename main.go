@@ -104,7 +104,7 @@ func (s *server) listenTS() {
 func (s *server) servePublic(w http.ResponseWriter, r *http.Request) {
 	log.Printf("pubsrv: %s %s", r.Method, r.URL.Path)
 
-	path := strings.TrimPrefix(r.URL.Path, "/")
+	path := strings.Trim(r.URL.Path, "/")
 	if path == "" {
 		http.Redirect(w, r, rootURL, http.StatusFound)
 		return
