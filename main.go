@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"html/template"
 	"log"
 	"net"
 	"net/http"
@@ -27,7 +28,8 @@ type server struct {
 	// fatal errors only
 	err chan error
 
-	db *sql.DB
+	db     *sql.DB
+	tsTmpl *template.Template
 }
 
 func newServer() *server {
@@ -38,8 +40,9 @@ func newServer() *server {
 	)`))
 
 	return &server{
-		db:  db,
-		err: make(chan error),
+		db:     db,
+		err:    make(chan error),
+		tsTmpl: must.Get(template.ParseFiles("add.html")),
 	}
 }
 
@@ -63,6 +66,58 @@ func (s *server) set(ctx context.Context, shortcode, url string) error {
 	return err
 }
 
+type Row struct {
+	Shortcode string
+	URL       string
+}
+
+func (s *server) serveGetTSRoot(w http.ResponseWriter, r *http.Request) {
+	rowsQuery, err := s.db.QueryContext(r.Context(), "select shortcode, url from urls")
+
+	if err != nil {
+		http.Error(w, fmt.Sprintf("could not load rows: %v", err), http.StatusInternalServerError)
+		log.Printf("ts-srv: ERROR %v", err)
+		return
+	}
+
+	rows := make([]Row, 0)
+
+	for rowsQuery.Next() {
+		var row Row
+		err := rowsQuery.Scan(&row.Shortcode, &row.URL)
+		if err != nil {
+			row.Shortcode = "could not read row"
+			row.URL = err.Error()
+			log.Printf("ts-srv: ERROR %v", err)
+		}
+		rows = append(rows, row)
+	}
+
+	err = s.tsTmpl.Execute(w, map[string][]Row{
+		"Rows": rows,
+	})
+
+	if err != nil {
+		log.Printf("ts-srv: ERROR %v", err)
+	}
+}
+
+func (s *server) servePostTSRoot(w http.ResponseWriter, r *http.Request) {
+	shortcode := r.FormValue("shortcode")
+	url := r.FormValue("url")
+	if shortcode == "" || url == "" {
+		http.Error(w, "missing parameter", http.StatusBadRequest)
+		return
+	}
+	err := s.set(r.Context(), shortcode, url)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("could not set /%s -> %s: %v", shortcode, url, err), http.StatusInternalServerError)
+		log.Printf("ts-srv: ERROR %v", err)
+		return
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
 func (s *server) serveTS(w http.ResponseWriter, r *http.Request) {
 	log.Printf("ts-srv: %s %s", r.Method, r.URL.Path)
 
@@ -73,21 +128,9 @@ func (s *server) serveTS(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case "GET":
-		http.ServeFile(w, r, "add.html")
+		s.serveGetTSRoot(w, r)
 	case "POST":
-		shortcode := r.FormValue("shortcode")
-		url := r.FormValue("url")
-		if shortcode == "" || url == "" {
-			http.Error(w, "missing parameter", http.StatusBadRequest)
-			return
-		}
-		err := s.set(r.Context(), shortcode, url)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("could not set /%s -> %s: %v", shortcode, url, err), http.StatusInternalServerError)
-			log.Printf("ts-srv: ERROR %v", err)
-			return
-		}
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		s.servePostTSRoot(w, r)
 	default:
 		http.Error(w, "bad method", http.StatusMethodNotAllowed)
 	}

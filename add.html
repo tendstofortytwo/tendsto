@@ -4,12 +4,42 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>tends.to</title>
+    <style>
+        input[type="submit"] {
+            margin-top: 0.5rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            border: 1px solid black;
+            padding: 0.5rem 1rem;
+        }
+    </style>
 </head>
 <body>
+    <h1>tends.to</h1>
+    <h2>add a new link</h2>
     <form action="/" method="post">
         https://tends.to/<input type="text" name="shortcode" required placeholder="redirect-a-url"> tends to <input type="text" name="url" required placeholder="https://tends.to/">
         <br>
         <input type="submit" value="approach the limit">
     </form>
+    <h2>existing links</h2>
+    <table>
+        <tr>
+            <th>/shortcode</th>
+            <th>URL</th>
+        </tr>
+        {{range .Rows}}
+            <tr>
+                <td>{{.Shortcode}}</td>
+                <td><a href="{{.URL}}">{{.URL}}</a></td>
+            </tr>
+        {{end}}
+    </table>
 </body>
 </html>
