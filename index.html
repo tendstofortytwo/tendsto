@@ -5,8 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>tends.to</title>
     <style>
-        input[type="submit"] {
+        br {
             margin-top: 0.5rem;
+            display: block;
         }
 
         table {
@@ -17,6 +18,14 @@
         th, td {
             border: 1px solid black;
             padding: 0.5rem 1rem;
+        }
+
+        td form {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.25rem;
         }
     </style>
 </head>
@@ -33,11 +42,26 @@
         <tr>
             <th>/shortcode</th>
             <th>URL</th>
+            <th colspan="2">actions</th>
         </tr>
         {{range .Rows}}
             <tr>
                 <td>/{{.Shortcode}}</td>
                 <td><a href="{{.URL}}">{{.URL}}</a></td>
+                <td>
+                    <form action="/" method="post">
+                        <input type="hidden" name="shortcode" value="{{.Shortcode}}">
+                        <input type="text" name="url" required placeholder="https://new.url/here">
+                        <input type="submit" value="edit">
+                    </form>
+                </td>
+                <td>
+                    <form action="/" method="post">
+                        <input type="hidden" name="shortcode" value="{{.Shortcode}}">
+                        <input type="hidden" name="delete" value="get rid of it">
+                        <input type="submit" value="delete">
+                    </form>
+                </td>
             </tr>
         {{end}}
     </table>

@@ -17,7 +17,10 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-var errNotFound = errors.New("not found")
+var (
+	errNotFound = errors.New("not found")
+	errNoAction = errors.New("no action")
+)
 
 const (
 	// what public / redirects to
@@ -42,7 +45,7 @@ func newServer() *server {
 	return &server{
 		db:     db,
 		err:    make(chan error),
-		tsTmpl: must.Get(template.ParseFiles("add.html")),
+		tsTmpl: must.Get(template.ParseFiles("index.html")),
 	}
 }
 
@@ -62,7 +65,17 @@ func (s *server) get(ctx context.Context, shortcode string) (string, error) {
 }
 
 func (s *server) set(ctx context.Context, shortcode, url string) error {
-	_, err := s.db.ExecContext(ctx, "insert into urls(shortcode, url) values(?, ?)", shortcode, url)
+	_, err := s.db.ExecContext(ctx,
+		`insert into urls(shortcode, url) values(?, ?)
+		on conflict(shortcode) do update set url=excluded.url`,
+		shortcode,
+		url,
+	)
+	return err
+}
+
+func (s *server) delete(ctx context.Context, shortcode string) error {
+	_, err := s.db.ExecContext(ctx, `delete from urls where shortcode=?`, shortcode)
 	return err
 }
 
@@ -103,15 +116,27 @@ func (s *server) serveGetTSRoot(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) servePostTSRoot(w http.ResponseWriter, r *http.Request) {
+	var err error
 	shortcode := r.FormValue("shortcode")
 	url := r.FormValue("url")
-	if shortcode == "" || url == "" {
-		http.Error(w, "missing parameter", http.StatusBadRequest)
+	delete := r.FormValue("delete") != ""
+	if shortcode == "" {
+		http.Error(w, "missing shortcode", http.StatusBadRequest)
 		return
 	}
-	err := s.set(r.Context(), shortcode, url)
+	if delete && url == "" {
+		err = s.delete(r.Context(), shortcode)
+	} else if !delete && url != "" {
+		err = s.set(r.Context(), shortcode, url)
+	} else {
+		err = errNoAction
+	}
 	if err != nil {
-		http.Error(w, fmt.Sprintf("could not set /%s -> %s: %v", shortcode, url, err), http.StatusInternalServerError)
+		status := http.StatusInternalServerError
+		if errors.Is(err, errNoAction) {
+			status = http.StatusBadRequest
+		}
+		http.Error(w, err.Error(), status)
 		log.Printf("ts-srv: ERROR %v", err)
 		return
 	}
